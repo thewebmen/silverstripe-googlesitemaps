@@ -8,6 +8,7 @@ use SilverStripe\Core\ClassInfo;
 use SilverStripe\Core\Config\Config;
 use SilverStripe\ORM\ArrayList;
 use SilverStripe\ORM\DataList;
+use SilverStripe\ORM\FieldType\DBField;
 use SilverStripe\Versioned\Versioned;
 use SilverStripe\View\ArrayData;
 use SilverStripe\Core\Extensible;
@@ -184,16 +185,30 @@ class GoogleSitemap
      * @param string
      * @param string
      * @param string
+     * @param ?string
      *
      * @return void
      */
-    public static function register_route($route, $changeFreq = 'monthly', $priority = '0.6')
+    public static function register_route($route, $changeFreq = 'monthly', $priority = '0.6', $lastEdited = null)
     {
+        $routeConfig = array(
+            'frequency' => ($changeFreq) ? $changeFreq : 'monthly',
+            'priority' => ($priority) ? $priority : '0.6'
+        );
+
+        if($lastEdited) {
+            try {
+                $datetime = new \DateTime($lastEdited);
+                $date = DBField::create_field('Datetime', $datetime->format(\DateTime::RFC3339));
+
+                $routeConfig['LastEdited'] = $date;
+            } catch (\Exception $e) {
+                // Just don't add the lastMod, do nothing with the exception.
+            }
+        }
+
         self::$routes = array_merge(self::$routes, array(
-            $route => array(
-                'frequency' => ($changeFreq) ? $changeFreq : 'monthly',
-                'priority' => ($priority) ? $priority : '0.6'
-            )
+            $route => $routeConfig
         ));
     }
 
@@ -204,13 +219,14 @@ class GoogleSitemap
      * @param array
      * @param string
      * @param string
+     * @param ?string
      *
      * @return void
      */
-    public static function register_routes($routes, $changeFreq = 'monthly', $priority = '0.6')
+    public static function register_routes($routes, $changeFreq = 'monthly', $priority = '0.6', $lastEdited = null)
     {
         foreach ($routes as $route) {
-            self::register_route($route, $changeFreq, $priority);
+            self::register_route($route, $changeFreq, $priority, $lastEdited);
         }
     }
 
@@ -274,11 +290,17 @@ class GoogleSitemap
 
             if ($instances) {
                 foreach ($instances as $route => $config) {
-                    $output->push(new ArrayData(array(
+                    $routeConfig = array(
                         'AbsoluteLink' => Director::absoluteURL($route),
                         'ChangeFrequency' => $config['frequency'],
                         'GooglePriority' => $config['priority']
-                    )));
+                    );
+
+                    if(array_key_exists('LastEdited', $config)) {
+                        $routeConfig['LastEdited'] = $config['LastEdited'];
+                    }
+
+                    $output->push(new ArrayData($routeConfig));
                 }
             }
 
